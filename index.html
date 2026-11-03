@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>빵빵 클랙슨 합창단</title>
+<style>
+:root{--bg:#fff3dc;--fg:#3a2616;--card:#ffffff;--ac:#ff6b5e;--mu:#8a6a50;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#201a2e;--fg:#f6edff;--card:#2e2745;--ac:#ff8f84;--mu:#b9a9d6}}
+:root[data-theme="dark"]{--bg:#201a2e;--fg:#f6edff;--card:#2e2745;--ac:#ff8f84;--mu:#b9a9d6}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:'Apple SD Gothic Neo','Noto Sans KR',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:12px;touch-action:manipulation}
+#wrap{position:relative;width:100%;max-width:640px}
+canvas{width:100%;aspect-ratio:8/5;display:block;border-radius:18px;touch-action:none;background:#cfc6ff}
+.ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:color-mix(in srgb,var(--bg) 88%,transparent);border-radius:18px;padding:12px;text-align:center}
+.ov h1{margin:0;font-size:clamp(24px,6vw,36px)}
+.ov p{margin:0;color:var(--mu);font-size:14px;line-height:1.5}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+button{font:inherit;font-weight:700;color:var(--fg);background:var(--card);border:3px solid var(--fg);border-radius:14px;padding:10px 18px;cursor:pointer;box-shadow:0 4px 0 var(--fg)}
+button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--fg)}
+button:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
+.hide{display:none}
+</style></head>
+<body>
+<div id="wrap">
+<canvas id="c" width="640" height="400"></canvas>
+<div id="menu" class="ov">
+<h1>빵빵 클랙슨 합창단</h1>
+<p>선생 차가 4박 동안 경적을 울리면, 이어서 똑같이 따라 울리세요.<br>라운드가 올라갈수록 박자가 빨라지고 복잡해져요.<br>5번 틀리면 게임 오버 · 스페이스바 또는 화면 터치 · 소리를 켜 주세요</p>
+<p id="bst"></p>
+<div class="row"><button id="go">출발!</button></div>
+</div>
+<div id="res" class="ov hide">
+<h1>게임 오버</h1><p id="rp"></p>
+<div class="row"><button id="again">다시 달리기</button></div>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id),C=$('c'),x=C.getContext('2d');
+const P=[262,330,392,494,523];
+let AC,M,T0,rounds=[],calls=[],resp=[],nextS=0,rn=0,run=false,pts=0,lives=5,cnt,lastCall=-9,lastTap=-9,fb={t:-9,s:'',bad:0},best=0;
+try{best=+localStorage.getItem('hb')||0}catch(e){}
+function showBest(){$('bst').textContent=best?'최고 점수 '+best+'점':''}
+function snd(f,t){const o=AC.createOscillator(),g=AC.createGain(),fl=AC.createBiquadFilter();o.connect(fl);fl.connect(g);g.connect(M);
+o.type='sawtooth';o.frequency.setValueAtTime(f,t);fl.frequency.value=1000;g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.22,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+.32);o.start(t);o.stop(t+.4)}
+function tick(t,hi){const o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(M);o.frequency.value=hi?1200:900;g.gain.setValueAtTime(hi?.1:.05,t);g.gain.exponentialRampToValueAtTime(.001,t+.05);o.start(t);o.stop(t+.06)}
+const bpmOf=r=>Math.min(150,100+r*3);
+function gen(r){const gs=r<3?1:.5,pool=[];for(let b=0;b<4;b+=gs)pool.push(b);
+const k=Math.min(pool.length,2+Math.floor(r*.6)),pick=[];
+while(pick.length<k){pick.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0])}
+return pick.sort((a,b)=>a-b)}
+function addRound(){const bpm=bpmOf(rn),sp=60/bpm,cs=nextS;
+for(let k=0;k<8;k++)tick(cs+k*sp,k%4==0);
+gen(rn).forEach((b,j)=>{const fr=P[j%5];calls.push({t:cs+b*sp,f:0});snd(fr,cs+b*sp);resp.push({t:cs+(4+b)*sp,d:0,fr})});
+rounds.push({cs,sp,n:rn+1,bpm});nextS=cs+8*sp;rn++}
+function start(){if(!AC)AC=new(window.AudioContext||window.webkitAudioContext)();AC.resume();
+M=AC.createGain();M.connect(AC.destination);
+rounds=[];calls=[];resp=[];rn=0;pts=0;lives=5;cnt={p:0,g:0,o:0};lastCall=lastTap=-9;
+const sp0=60/bpmOf(0);T0=AC.currentTime+.9;for(let k=0;k<4;k++)tick(T0+k*sp0,k==0);
+nextS=T0+4*sp0;addRound();
+$('menu').classList.add('hide');$('res').classList.add('hide');run=true}
+function mistake(s){fb={t:AC.currentTime,s,bad:1};lives--;if(lives<=0)finish()}
+function tap(){if(!run||!AC)return;const n=AC.currentTime;let bi=-1,bd=9;
+resp.forEach((r,i)=>{if(!r.d){const d=Math.abs(n-r.t);if(d<bd){bd=d;bi=i}}});
+const nx=resp.find(r=>!r.d);snd(nx?nx.fr:392,n);lastTap=n;
+if(bi>=0&&bd<=.18){resp[bi].d=1;if(bd<.06){pts+=100;cnt.p++;fb={t:n,s:'바로 그거야!',bad:0}}else if(bd<.12){pts+=60;cnt.g++;fb={t:n,s:'좋아요',bad:0}}else{pts+=30;cnt.o++;fb={t:n,s:'아깝다',bad:0}}}
+else if(n>rounds[0].cs-.2)mistake('삑!')}
+C.addEventListener('pointerdown',e=>{e.preventDefault();tap()});
+addEventListener('keydown',e=>{if(e.code=='Space'&&!e.repeat&&run){e.preventDefault();tap()}});
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function car(cx,e,who){const col=who?'#ff6b5e':'#7fa3c4',lit=e>0;
+x.fillStyle=col;x.beginPath();x.roundRect(cx-60,262,120,62,16);x.fill();
+x.fillStyle='#bfe3f5';x.beginPath();x.roundRect(cx-42,230,84,40,14);x.fill();x.fillStyle=col;x.fillRect(cx-46,262,92,10);
+x.fillStyle=lit?'#fff6a0':'#e8e8ff';x.fillRect(cx-52,282,30,8);x.fillRect(cx+22,282,30,8);
+if(lit){x.globalAlpha=e*.5;x.beginPath();x.arc(cx-37,286,26,0,7);x.arc(cx+37,286,26,0,7);x.fill();x.globalAlpha=1}
+x.fillStyle='#2a1a10';x.beginPath();x.ellipse(cx,306,22,4+e*8,0,0,7);x.fill();x.fillRect(cx-52,322,18,10);x.fillRect(cx+34,322,18,10);
+if(lit){x.globalAlpha=e;x.fillStyle='#fff';x.strokeStyle='#2a1a10';x.lineWidth=4;x.font='bold 30px sans-serif';x.textAlign='left';x.strokeText('빵!',cx+50,238-(1-e)*40);x.fillText('빵!',cx+50,238-(1-e)*40);x.globalAlpha=1}
+x.fillStyle='#2a1a10';x.font='bold 17px sans-serif';x.textAlign='center';x.fillText(who?'내 차':'선생 차',cx,374)}
+function mini(cx,cy,on){x.globalAlpha=on?1:.25;x.fillStyle='#ff6b5e';x.beginPath();x.roundRect(cx-12,cy-4,24,9,3);x.fill();x.beginPath();x.roundRect(cx-7,cy-10,14,7,3);x.fill();x.fillStyle='#222';x.beginPath();x.arc(cx-6,cy+5,3.5,0,7);x.arc(cx+6,cy+5,3.5,0,7);x.fill();x.globalAlpha=1}
+function draw(n){x.clearRect(0,0,640,400);x.fillStyle='#cfc6ff';x.fillRect(0,0,640,400);
+x.fillStyle='rgba(255,255,255,.35)';x.beginPath();x.arc(90,100,34,0,7);x.arc(560,96,24,0,7);x.fill();
+x.fillStyle='rgba(0,0,0,.12)';x.fillRect(0,316,640,84);x.fillStyle='rgba(255,255,255,.75)';for(let i=0;i<9;i++)x.fillRect(i*80+10,345,44,5);
+car(170,clamp(1-(n-lastCall)/.28,0,1),0);car(470,clamp(1-(n-lastTap)/.28,0,1),1);
+const cur=rounds.filter(r=>n>=r.cs).pop();let ph='준비',bp=(n-T0)/(60/bpmOf(0)),rt='',tx;
+if(cur){bp=(n-cur.cs)/cur.sp;ph=bp<4?'잘 들어보세요':'따라 하세요!';rt='라운드 '+cur.n+' · '+cur.bpm+' BPM'}
+x.fillStyle='#2a1a10';x.textAlign='left';x.font='bold 20px sans-serif';x.fillText(rt||'빵빵 클랙슨 합창단',18,34);
+for(let i=0;i<5;i++)mini(30+i*30,56,i<lives);
+x.textAlign='right';x.font='bold 20px sans-serif';x.fillText(pts+'점',622,34);
+x.textAlign='center';x.font='bold 24px sans-serif';x.fillText(ph,320,110);
+const cb=((Math.floor(bp)%4)+4)%4;for(let i=0;i<4;i++){x.fillStyle=bp>=0&&i==cb?'#ff6b5e':'rgba(0,0,0,.2)';x.beginPath();x.arc(290+i*20,386,6,0,7);x.fill()}
+const a=1-(n-fb.t)/.6;if(a>0){x.globalAlpha=a;x.font='bold 26px sans-serif';x.fillStyle=fb.bad?'#d42c2c':'#2a1a10';x.fillText(fb.s,470,190-(1-a)*20);if(fb.bad){x.globalAlpha=a*.3;x.fillStyle='#ff3c3c';x.fillRect(0,0,640,400)}x.globalAlpha=1}}
+function finish(){run=false;M.disconnect();const n=AC.currentTime,cur=rounds.filter(r=>n>=r.cs).pop(),rd=cur?cur.n:0;
+if(pts>best){best=pts;try{localStorage.setItem('hb',best)}catch(e){}}
+$('rp').innerHTML=rd+'라운드까지 달렸어요 · '+pts+'점<br>완벽 '+cnt.p+' · 좋음 '+cnt.g+' · 아깝 '+cnt.o+' · 최고 '+best+'점';
+$('res').classList.remove('hide')}
+function loop(){requestAnimationFrame(loop);if(!AC)return;const n=AC.currentTime;
+if(run){while(nextS<n+3.5)addRound();calls.forEach(c=>{if(!c.f&&n>=c.t){c.f=1;lastCall=c.t}});
+for(const r of resp){if(run&&!r.d&&n>r.t+.18){r.d=1;mistake('놓쳤어!')}}}
+if(rounds.length)draw(n)}
+$('go').onclick=start;$('again').onclick=start;showBest();loop();
+</script></body></html>
